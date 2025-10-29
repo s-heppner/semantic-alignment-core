@@ -165,14 +165,14 @@ class SemanticMatchRegistry:
         request_body = {"semantic_id": semantic_id}
         endpoint = config['RESOLVER']['endpoint']
         port = config['RESOLVER'].getint('port')
-        url = f"{endpoint}:{port}/get_semantic_matching_service"
+        url = f"{endpoint}:{port}/get_smr"
         response = requests.get(url, json=request_body)
 
         # Check if the response is successful (status code 200)
         if response.status_code == 200:
             # Parse the JSON response and construct SMSResponse object
             response_json = response.json()
-            response_endpoint = response_json['semantic_matching_service_endpoint']
+            response_endpoint = response_json['smr_endpoint']
             return response_endpoint
 
         return None

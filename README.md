@@ -11,4 +11,5 @@ RWTH Aachen university.
 
 ## Project Structure
 
-- [semantic_match_registry](/semantic_match_registry/README.md): Registry service for semantic matches
+- [semantic_match_registry](/semantic_match_registry/README.md): Semantic Match Registry (SMR) service
+- [smr_discovery](/smr_discovery/README.md): Discovery service for SMRs

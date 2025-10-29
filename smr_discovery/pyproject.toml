@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "smr_discovery"
+version = "0.1.0"
+description = "A prototype SMR Discovery service implemented in Python"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [{ name = "Sebastian Heppner", email = "mail@s-heppner.com" }]
+dependencies = [
+    "fastapi>=0.95.0",
+    "pydantic>=1.10",
+    "uvicorn>=0.21.1",
+    "dnspython>=2.4.2",
+    "requests>=2.32.3",
+]
+
+[project.optional-dependencies]
+dev = [
+    "mypy",
+    "pycodestyle",
+    "coverage",
+    "httpx"
+]
+
+[tool.setuptools.package-dir]
+"" = "src"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["smr_discovery*"]
+
+# include your default config in the wheel
+[tool.setuptools.package-data]
+"smr" = ["config.ini.default", "endpoints.json.default"]

@@ -10,10 +10,9 @@
 /.idea/
 
 # Python distribution artifacts
-/build/
-/dist/
-/*.egg-info/
-/docs/build/
+build/
+dist/
+*.egg-info/
 
 # Coverage artifacts
 /.coverage
