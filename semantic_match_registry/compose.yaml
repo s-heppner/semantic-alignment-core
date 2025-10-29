@@ -1,0 +1,9 @@
+services:
+  semantic_matching_service:
+    build: .
+    container_name: semantic_match_registry
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    working_dir: /app/src/smr
+    command: ["python", "service.py"]

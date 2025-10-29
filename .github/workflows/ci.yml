@@ -1,0 +1,98 @@
+name: ci
+
+on:
+  push:
+    branches: [ main ]        # only run on direct pushes to main
+  pull_request:               # run on ANY PR, from ANY branch, into ANY branch
+    branches: [ "**" ]
+
+# Cancel running jobs, if a newer state was pushed
+concurrency:
+  group: ${{ github.ref }}
+  cancel-in-progress: true
+
+
+env:
+  X_PYTHON_VERSION: "3.11"
+
+jobs:
+  smr_build:
+    # This job checks if the build succeeds and the Docker container can be build and executed
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./semantic_match_registry
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Set up Python ${{ env.X_PYTHON_VERSION }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.X_PYTHON_VERSION }}
+      - name: Build the package
+        run: pip install .
+      - name: Build the Docker image
+        run: |
+          docker build -t semantic_match_registry .
+      - name: Run Docker container
+        run: |
+           docker run -d --name semantic_match_registry semantic_match_registry
+      - name: Wait for container and server initialization
+        run: |
+          timeout 30s bash -c '
+            until docker logs semantic_match_registry 2>&1 | grep -q "INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)"; do
+              sleep 2
+            done
+          '
+      - name: Check if container is running
+        run: |
+          docker inspect --format='{{.State.Running}}' semantic_match_registry | grep true
+      - name: Stop and remove the Docker container
+        run: |
+          docker stop semantic_match_registry && docker rm semantic_match_registry
+
+  smr_test:
+    # This job runs the unittests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./semantic_match_registry
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.X_PYTHON_VERSION }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.X_PYTHON_VERSION }}
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install .[dev]
+
+      - name: Run Python Tests
+        run: python -m unittest discover
+
+  smr_static-analysis:
+    # This job runs static code analysis, namely pycodestyle and mypy
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./semantic_match_registry
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: ${{ env.X_PYTHON_VERSION }}
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install .[dev]
+      - name: Check typing with MyPy
+        run: |
+          mypy src/smr tests
+      - name: Check code style with PyCodestyle
+        run: |
+          pycodestyle --count --max-line-length 120 src/smr tests
