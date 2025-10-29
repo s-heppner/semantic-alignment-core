@@ -1,0 +1,9 @@
+README.md
+pyproject.toml
+src/semantic_match_registry.egg-info/PKG-INFO
+src/semantic_match_registry.egg-info/SOURCES.txt
+src/semantic_match_registry.egg-info/dependency_links.txt
+src/semantic_match_registry.egg-info/requires.txt
+src/semantic_match_registry.egg-info/top_level.txt
+tests/test_algorithm.py
+tests/test_semantic_matcher.py
