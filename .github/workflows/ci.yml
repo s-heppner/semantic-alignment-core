@@ -96,3 +96,84 @@ jobs:
       - name: Check code style with PyCodestyle
         run: |
           pycodestyle --count --max-line-length 120 src/smr tests
+
+  discovery_build:
+    # This job checks if the build succeeds and the Docker container can be build and executed
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./smr_discovery
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Set up Python ${{ env.X_PYTHON_VERSION }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.X_PYTHON_VERSION }}
+      - name: Build the package
+        run: pip install .
+      - name: Build the Docker image
+        run: |
+          docker build -t smr_discovery .
+      - name: Run Docker container
+        run: |
+           docker run -d --name smr_discovery smr_discovery
+      - name: Wait for container and server initialization
+        run: |
+          timeout 30s bash -c '
+            until docker logs smr_discovery 2>&1 | grep -q "INFO:     Uvicorn running on http://0.0.0.0:8125 (Press CTRL+C to quit)"; do
+              sleep 2
+            done
+          '
+      - name: Check if container is running
+        run: |
+          docker inspect --format='{{.State.Running}}' smr_discovery | grep true
+      - name: Stop and remove the Docker container
+        run: |
+          docker stop smr_discovery && docker rm smr_discovery
+
+  discovery_test:
+    # This job runs the unittests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./smr_discovery
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.X_PYTHON_VERSION }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.X_PYTHON_VERSION }}
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install .[dev]
+
+      - name: Run Python Tests
+        run: python -m unittest discover
+
+  discovery_static-analysis:
+    # This job runs static code analysis, namely pycodestyle and mypy
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./smr_discovery
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: ${{ env.X_PYTHON_VERSION }}
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install .[dev]
+      - name: Check typing with MyPy
+        run: |
+          mypy src/smr_discovery tests
+      - name: Check code style with PyCodestyle
+        run: |
+          pycodestyle --count --max-line-length 120 src/smr_discovery tests

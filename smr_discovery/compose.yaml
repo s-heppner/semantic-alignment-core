@@ -1,0 +1,14 @@
+services:
+  smr_discovery:
+    build: .
+    container_name: smr_discovery
+    environment:
+      SMR_ENDPOINTS_JSON_FILE: /app/src/smr_discovery/endpoints.json.default
+      SMR_ENDPOINT: http://localhost:8125
+      SMR_LISTEN_ADDRESS: 0.0.0.0
+      SMR_PORT: 8125
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    working_dir: /app/src/smr_discovery
+    command: ["python", "service.py"]

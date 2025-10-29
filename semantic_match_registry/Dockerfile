@@ -1,9 +1,6 @@
 # Use the official Alpine Linux as the base image
 FROM python:3.11-alpine
 
-# Install Git
-RUN apk update && apk add --no-cache git
-
 # Set the working directory in the container
 WORKDIR /app
 

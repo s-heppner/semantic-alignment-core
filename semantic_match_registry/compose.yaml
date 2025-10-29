@@ -1,5 +1,5 @@
 services:
-  semantic_matching_service:
+  semantic_match_registry:
     build: .
     container_name: semantic_match_registry
     restart: unless-stopped

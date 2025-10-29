@@ -1,18 +1,6 @@
-# Semantic Match Registry
+# smr_discovery 
 
-This is a proof-of-concept implementation of a Semantic Match Registry (SMR) service using Python. 
-The idea behind this service is to create a uniform interface for exchanging semantic matches, that are stored
-decentralized across multiple SMRs. 
-
-> [!warning]
-> This project is **not** about finding semantic matches or semantic similarities, it rather requires these as input.
-
-## Structure
-The project is structured as follows:
-- `algorithm.py` implements the decentralized match aggregation algorithm
-- `service.py` offers the service implementation using the [FastAPI](https://fastapi.tiangolo.com/) framework.
-  Note that you can find a detailed interface description (OpenAPI) by [running](#how-to-use) the server locally and 
-  navigating to `<endpoint>/docs`.
+A Service for discovering Semantic Match Registry (SMR) services for given `semantic_ids`
 
 ## How to Use
 There are two main options to run:
@@ -24,7 +12,16 @@ You need a working Python installation (3.11 or higher).
 - Activate the virtual environment: `source venv/bin/activate`
 - Install the package: `pip install .`
 - Copy the `config.ini.default` to `config.ini` and adapt the fields as necessary
-- Run the service: `python3 src/smr/service.py`
+- Run the service: 
+
+```commandline
+python -m smr_discovery.service \
+  --endpoints-json-file ./configs/endpoints.json \
+  --endpoint http://localhost:8125 \
+  --listen-address 127.0.0.1 \
+  --port 8125
+
+```
 
 ### Run via Docker
 To run via docker, you obviously need a working docker installation.
@@ -36,10 +33,10 @@ To run via docker, you obviously need a working docker installation.
 
 In the project root directory:
 ```commandline
-docker build -t semantic_match_registry .
+docker build -t smr_discovery .
 ```
 ```commandline
-docker run -d -p 8000:8000 semantic_match_registry
+docker run --rm -p 8125:8125 smr_discovery
 ```
 
 > [!note]
@@ -54,3 +51,4 @@ docker compose up
 
 > [!note]
 > If you changed your `config.ini`, you might need to adapt the respective fields in the `compose.yaml`. 
+
