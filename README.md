@@ -13,4 +13,5 @@ RWTH Aachen university.
 
 - [semantic_match_registry](/semantic_match_registry): Semantic Match Registry (SMR) service
 - [smr_discovery](/smr_discovery): Discovery service for SMRs
+- [smr_alignment](/smr_alignment): Toolset for aligning real world data to the SMR concept
 

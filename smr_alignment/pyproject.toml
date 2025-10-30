@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "smr_alignment"
+version = "0.1.0"
+description = "Toolset to align real world data to align with the SMR concept, implemented in Python"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [{ name = "Sebastian Heppner", email = "mail@s-heppner.com" }]
+dependencies = [
+  "semantic_match_registry>=0.0.1",
+  "networkx>=3.4.2",
+  "tqdm>=4.46.1",
+]
+
+[project.optional-dependencies]
+dev = [
+  "mypy",
+  "pycodestyle",
+  "coverage",
+  "types-networkx",
+  "types-tqdm",
+]
+
+[tool.setuptools.package-dir]
+"" = "src"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["smr_alignment*"]
