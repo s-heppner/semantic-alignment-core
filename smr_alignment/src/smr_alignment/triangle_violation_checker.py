@@ -9,8 +9,8 @@ a requirement for the SMR concept.
 For more details, I'd like to refer to my dissertation.
 """
 import math
-from tqdm import tqdm
 
+from tqdm import tqdm
 import networkx as nx
 
 from smr.algorithm import SemanticMatchGraph

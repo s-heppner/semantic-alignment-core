@@ -10,9 +10,11 @@ readme = "README.md"
 requires-python = ">=3.11"
 authors = [{ name = "Sebastian Heppner", email = "mail@s-heppner.com" }]
 dependencies = [
-  "semantic_match_registry>=0.0.1",
+  "semantic_match_registry>=1.0.0",
   "networkx>=3.4.2",
   "tqdm>=4.46.1",
+  "numpy>=2.3.4",
+  "cvxpy>=1.7.3",
 ]
 
 [project.optional-dependencies]
