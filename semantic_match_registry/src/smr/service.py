@@ -31,7 +31,7 @@ class SemanticMatchRegistry:
     :func:`~.SemanticMatchRegistry.post_matches` allows to post
     :class:`model.SemanticMatch`es to the :class:`~.SemanticMatchRegistry`.
 
-    :func:`~.SemanticMatchRegistry.get_matches` lets users get the
+    :func:`~.SemanticMatchRegistry.query_matches` lets users get the
     :class:`model.SemanticMatch`es of the :class:`~.SemanticMatchRegistry`
     and the respective remote :class:`~.SemanticMatchRegistry`s.
 
@@ -57,13 +57,14 @@ class SemanticMatchRegistry:
         self.router.add_api_route(
             "/all_matches",
             self.get_all_matches,
+            response_model=List[algorithm.SemanticMatch],
             methods=["GET"]
         )
         self.router.add_api_route(
-            "/get_matches",
-            self.get_matches,
+            "/query_matches",
+            self.query_matches,
             response_model=List[algorithm.SemanticMatch],
-            methods=["GET"]
+            methods=["POST"]
         )
         self.router.add_api_route(
             "/post_matches",
@@ -80,7 +81,7 @@ class SemanticMatchRegistry:
         matches = self.graph.get_all_matches()
         return matches
 
-    def get_matches(
+    def query_matches(
             self,
             request_body: MatchRequest
     ) -> List[algorithm.SemanticMatch]:
@@ -135,9 +136,12 @@ class SemanticMatchRegistry:
                 local_only=False,
                 already_checked_locations=already_checked_locations
             )
-            url = f"{remote_matching_service}/get_matches"
-            new_matches_response = requests.get(url, json=remote_matching_request.model_dump_json())
-            response_matches = [algorithm.SemanticMatch(**match) for match in new_matches_response.json()]
+            url = f"{remote_matching_service}/query_matches"
+            new_matches_response = requests.post(url, json=remote_matching_request.model_dump(mode="json"))
+            payload = new_matches_response.json()
+            if not isinstance(payload, list):
+                return matches  # Protect against bad remotes by stopping if they send nonsense
+            response_matches = [algorithm.SemanticMatch(**match) for match in payload]
             additional_remote_matches.extend(response_matches)
         # Finally, put all matches together and return
         matches.extend(additional_remote_matches)
@@ -151,7 +155,8 @@ class SemanticMatchRegistry:
             self.graph.add_semantic_match(
                 base_semantic_id=match.base_semantic_id,
                 match_semantic_id=match.match_semantic_id,
-                score=match.score,
+                score=float(match.score),
+                metric_id=match.metric_id,
             )
         return Response(status_code=200)
 

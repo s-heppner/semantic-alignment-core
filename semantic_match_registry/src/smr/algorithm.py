@@ -1,5 +1,5 @@
 import json
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 import heapq
 
 import networkx as nx
@@ -13,45 +13,80 @@ class SemanticMatchGraph(nx.DiGraph):
     def add_semantic_match(self,
                            base_semantic_id: str,
                            match_semantic_id: str,
-                           score: float):
-        self.add_edge(
-            u_of_edge=base_semantic_id,
-            v_of_edge=match_semantic_id,
-            weight=score,
-        )
+                           score: float,
+                           metric_id: Optional[str] = None) -> None:
+        """
+        Add a semantic match to the graph.
+
+        This will overwrite the match with the same `metric_id` (including `None`), if it exists.
+        Every `{metric_id: score}` will be stored in the `metric_scores` edge attribute, the actual `weight` of the
+        edge will be the maximum of the scores, as that leads to minimal
+        semantic similarity triangle inequality violations.
+
+        :param base_semantic_id: From semantic_id
+        :param match_semantic_id: To semantic_id (Note, the graph is not necessarily symmetric!)
+        :param score: Semantic similarity score
+        :param metric_id: Globally identifying string of the metric used (e.g. the NLP model + version)
+        """
+        u, v = base_semantic_id, match_semantic_id
+        # Create edge if it doesn't exist yet
+        if not self.has_edge(u, v):
+            self.add_edge(u, v, weight=float(score), metric_scores={})
+        # Retrieve metrics dict
+        metrics = self[u][v].setdefault("metric_scores", {})
+        # Use a fallback key if no metric_id was provided
+        key = metric_id if metric_id is not None else "_no_metric_id"
+        metrics[key] = float(score)
+        # Update the working weight to the max of all metrics
+        self[u][v]["weight"] = max(metrics.values())
 
     def get_all_matches(self) -> List["SemanticMatch"]:
         matches: List["SemanticMatch"] = []
 
         # Iterate over all edges in the graph
         for base, match, data in self.edges(data=True):
-            score = data.get("weight", 0.0)  # Get weight, default to 0.0 if missing
-            matches.append(SemanticMatch(
-                base_semantic_id=base,
-                match_semantic_id=match,
-                score=score,
-                path=[]  # Direct match, no intermediate nodes
-            ))
+            weight = data.get("weight", 0.0)  # Get weight, default to 0.0 if missing
+            for metric, score in data.get("metric_scores", {}).items():
+                matches.append(SemanticMatch(
+                    base_semantic_id=base,
+                    match_semantic_id=match,
+                    score=score,
+                    path=[],  # Direct match, no intermediate nodes
+                    metric_id=None if metric == "_no_metric_id" else metric,
+                    graph_score=weight,
+                ))
 
         return matches
 
-    def to_file(self, filename: str):
-        with open(filename, "w") as file:
-            matches = [match.model_dump() for match in self.get_all_matches()]
-            json.dump(matches, file, indent=4)
+    def to_file(self, filename: str) -> None:
+        data = {
+            "nodes": list(self.nodes()),
+            "edges": [
+                {
+                    "u": u,
+                    "v": v,
+                    "weight": float(d.get("weight", 0.0)),
+                    "metric_scores": {k: float(vv) for k, vv in d.get("metric_scores", {}).items()},
+                }
+                for u, v, d in self.edges(data=True)
+            ],
+        }
+        with open(filename, "w") as f:
+            json.dump(data, f, indent=2)
 
     @classmethod
     def from_file(cls, filename: str) -> "SemanticMatchGraph":
-        with open(filename, "r") as file:
-            matches_data = json.load(file)
-        graph = SemanticMatchGraph()
-        for match_data in matches_data:
-            graph.add_semantic_match(
-                base_semantic_id=match_data["base_semantic_id"],
-                match_semantic_id=match_data["match_semantic_id"],
-                score=match_data["score"]
-            )
-        return graph
+        with open(filename) as f:
+            data = json.load(f)
+        G = cls()
+        G.add_nodes_from(data.get("nodes", []))
+        for e in data.get("edges", []):
+            u, v = e["u"], e["v"]
+            metrics = e.get("metric_scores", {})
+            # rebuild edge and recalc active weight as max(metric_scores)
+            G.add_edge(u, v, metric_scores=metrics,
+                       weight=max(metrics.values()) if metrics else float(e.get("weight", 0.0)))
+        return G
 
 
 class SemanticMatch(BaseModel):
@@ -59,6 +94,10 @@ class SemanticMatch(BaseModel):
     match_semantic_id: str
     score: float
     path: List[str]  # The path of `semantic_id`s that the algorithm took
+    metric_id: Optional[str] = None  # Globally identifying string of the metric used (e.g. the NLP model + version)
+    graph_score: Optional[float] = None  # The score that was considered in the SemanticMatchGraph's search algorithm
+    # This value can be ignored in most cases and is more interesting as a debug information. It might explain why a
+    # SemanticMatch with this score was returned by the query, even though the score might not fit.
 
     def __str__(self) -> str:
         return f"{' -> '.join(self.path + [self.match_semantic_id])} = {self.score}"
@@ -69,6 +108,8 @@ class SemanticMatch(BaseModel):
             self.match_semantic_id,
             self.score,
             tuple(self.path),
+            self.metric_id,
+            self.graph_score,
         ))
 
 
@@ -123,17 +164,51 @@ def find_semantic_matches(
 
         # Store result if above threshold (except the start node)
         if node != semantic_id and score >= min_score:
-            results.append(SemanticMatch(
-                base_semantic_id=semantic_id,
-                match_semantic_id=node,
-                score=score,
-                path=path
-            ))
+            # Single-edge path if path == [semantic_id]
+            is_single_edge = (len(path) == 1 and path[0] == semantic_id)
+
+            if is_single_edge:
+                # Emit one result per metric on the direct edge (semantic_id -> node)
+                edge_data = graph[semantic_id].get(node, {})
+                metrics = edge_data.get("metric_scores", {})
+                if metrics:
+                    for metric, mscore in metrics.items():
+                        matches_metric_id = None if metric == "_no_metric_id" else metric
+                        # score = metric's own score; graph_score = path product (ranking basis)
+                        results.append(SemanticMatch(
+                            base_semantic_id=semantic_id,
+                            match_semantic_id=node,
+                            score=float(mscore),
+                            path=path,  # single hop path holds [semantic_id]
+                            metric_id=matches_metric_id,
+                            graph_score=score,
+                        ))
+                else:
+                    # No metrics dict present, fall back to aggregated-only result
+                    results.append(SemanticMatch(
+                        base_semantic_id=semantic_id,
+                        match_semantic_id=node,
+                        score=score,
+                        path=path,
+                        metric_id=None,
+                        graph_score=score,
+                    ))
+            else:
+                # Multi-edge path: no single metric applies
+                results.append(SemanticMatch(
+                    base_semantic_id=semantic_id,
+                    match_semantic_id=node,
+                    score=score,  # path product
+                    path=path,
+                    metric_id=None,
+                    graph_score=score,
+                ))
 
         # Traverse to the neighboring and therefore connected `semantic_id`s
         for neighbor, edge_data in graph[node].items():
-            edge_weight = edge_data["weight"]
-            assert isinstance(edge_weight, float)
+            if path and neighbor == path[-1]:
+                continue  # avoid immediate backtrack A->B->A ping-pong
+            edge_weight = float(edge_data.get("weight", 0.0))
             new_score: float = score * edge_weight  # Multiplicative propagation
 
             # Prevent loops by ensuring we do not revisit the start node after the first iteration
