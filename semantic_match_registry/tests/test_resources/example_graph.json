@@ -1,20 +1,34 @@
-[
-    {
-        "base_semantic_id": "https://s-heppner.com/semantic_id/one",
-        "match_semantic_id": "https://s-heppner.com/semantic_id/uno",
-        "score": 0.9,
-        "path": []
-    },
-    {
-        "base_semantic_id": "https://s-heppner.com/semantic_id/one",
-        "match_semantic_id": "https://remote.com/semantic_id/deux",
-        "score": 0.7,
-        "path": []
-    },
-    {
-        "base_semantic_id": "https://s-heppner.com/semantic_id/uno",
-        "match_semantic_id": "https://s-heppner.com/semantic_id/trois",
-        "score": 0.6,
-        "path": []
-    }
-]
+{
+    "nodes": [
+        "https://s-heppner.com/semantic_id/one",
+        "https://s-heppner.com/semantic_id/uno",
+        "https://s-heppner.com/semantic_id/trois",
+        "https://remote.com/semantic_id/deux"
+    ],
+    "edges": [
+        {
+            "u": "https://s-heppner.com/semantic_id/one",
+            "v": "https://s-heppner.com/semantic_id/uno",
+            "weight": 0.9,
+            "metric_scores": {
+                "_no_metric_id": 0.9
+            }
+        },
+        {
+            "u": "https://s-heppner.com/semantic_id/one",
+            "v": "https://remote.com/semantic_id/deux",
+            "weight": 0.7,
+            "metric_scores": {
+                "_no_metric_id": 0.7
+            }
+        },
+        {
+            "u": "https://s-heppner.com/semantic_id/uno",
+            "v": "https://s-heppner.com/semantic_id/trois",
+            "weight": 0.6,
+            "metric_scores": {
+                "_no_metric_id": 0.6
+            }
+        }
+    ]
+}

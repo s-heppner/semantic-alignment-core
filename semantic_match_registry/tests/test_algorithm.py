@@ -26,9 +26,12 @@ class TestSemanticMatchGraph(unittest.TestCase):
         matches = self.graph.get_all_matches()
 
         expected_matches = [
-            algorithm.SemanticMatch(base_semantic_id="A", match_semantic_id="B", score=0.8, path=[]),
-            algorithm.SemanticMatch(base_semantic_id="B", match_semantic_id="C", score=0.6, path=[]),
-            algorithm.SemanticMatch(base_semantic_id="C", match_semantic_id="D", score=0.9, path=[]),
+            algorithm.SemanticMatch(base_semantic_id="A", match_semantic_id="B", score=0.8, path=[],
+                                    metric_id=None, graph_score=0.8),
+            algorithm.SemanticMatch(base_semantic_id="B", match_semantic_id="C", score=0.6, path=[],
+                                    metric_id=None, graph_score=0.6),
+            algorithm.SemanticMatch(base_semantic_id="C", match_semantic_id="D", score=0.9, path=[],
+                                    metric_id=None, graph_score=0.9),
         ]
 
         self.assertEqual(len(matches), 3, "Incorrect number of matches retrieved.")
@@ -40,19 +43,90 @@ class TestSemanticMatchGraph(unittest.TestCase):
         matches = empty_graph.get_all_matches()
         self.assertEqual([], matches, "Empty graph should return an empty list.")
 
-    def test_get_all_matches_duplicate_edges(self):
-        """Test handling of duplicate edges with different scores."""
-        self.graph.add_semantic_match("A", "B", 0.9)  # Overwriting edge
-        matches = self.graph.get_all_matches()
+    def test_metric_merge_sets_weight_to_max(self):
+        """Adding multiple metrics to the same edge merges them and sets weight=max."""
+        g = algorithm.SemanticMatchGraph()
+        g.add_semantic_match("A", "B", 0.6, metric_id="m1")
+        g.add_semantic_match("A", "B", 0.9, metric_id="m2")
 
-        expected_matches = [
-            algorithm.SemanticMatch(base_semantic_id="A", match_semantic_id="B", score=0.9, path=[]),
-            algorithm.SemanticMatch(base_semantic_id="B", match_semantic_id="C", score=0.6, path=[]),
-            algorithm.SemanticMatch(base_semantic_id="C", match_semantic_id="D", score=0.9, path=[]),
+        data = g["A"]["B"]
+        self.assertDictEqual(
+            data["metric_scores"],
+            {"m1": 0.6, "m2": 0.9},
+            "metric_scores should contain both metrics with their scores",
+        )
+        self.assertAlmostEqual(
+            data["weight"], 0.9, places=12,
+            msg="weight must be the maximum of all metric scores",
+        )
+
+        # get_all_matches should emit one SemanticMatch per metric with graph_score=weight
+        matches = g.get_all_matches()
+        expected = [
+            algorithm.SemanticMatch(base_semantic_id="A", match_semantic_id="B", score=0.6, path=[],
+                                    metric_id="m1", graph_score=0.9),
+            algorithm.SemanticMatch(base_semantic_id="A", match_semantic_id="B", score=0.9, path=[],
+                                    metric_id="m2", graph_score=0.9),
         ]
+        self.assertCountEqual(expected, matches,
+                              "get_all_matches should list per-metric entries with correct graph_score")
 
-        self.assertEqual(len(matches), 3, "Duplicate edge handling failed.")
-        self.assertCountEqual(expected_matches, matches, "Matches do not match expected results.")
+    def test_metric_overwrite_same_id(self):
+        """Re-adding the same metric_id overwrites its score and recomputes weight."""
+        g = algorithm.SemanticMatchGraph()
+        g.add_semantic_match("A", "B", 0.6, metric_id="m1")
+        g.add_semantic_match("A", "B", 0.7, metric_id="m1")  # overwrite same metric_id
+
+        data = g["A"]["B"]
+        self.assertDictEqual(
+            data["metric_scores"],
+            {"m1": 0.7},
+            "metric score should be overwritten for the same metric_id",
+        )
+        self.assertAlmostEqual(
+            data["weight"], 0.7, places=12,
+            msg="weight should reflect the updated metric score",
+        )
+
+    def test_no_metric_id_fallback_key_and_match_export(self):
+        """Edges added without metric_id use '_no_metric_id' and export with metric_id=None."""
+        g = algorithm.SemanticMatchGraph()
+        g.add_semantic_match(base_semantic_id="X", match_semantic_id="Y", score=0.8)  # no metric_id
+        g.add_semantic_match(base_semantic_id="X", match_semantic_id="Y", score=0.5, metric_id="m1")  # second metric
+
+        data = g["X"]["Y"]
+        self.assertIn("_no_metric_id", data["metric_scores"], "fallback key should exist for metric-less adds")
+        self.assertDictEqual(
+            data["metric_scores"],
+            {"_no_metric_id": 0.8, "m1": 0.5},
+            "metric_scores should contain both the fallback and named metric",
+        )
+        self.assertAlmostEqual(data["weight"], 0.8, places=12, msg="weight must be the max of metrics")
+
+        matches = g.get_all_matches()
+        expected = [
+            algorithm.SemanticMatch(base_semantic_id="X", match_semantic_id="Y", score=0.8, path=[],
+                                    metric_id=None, graph_score=0.8),
+            algorithm.SemanticMatch(base_semantic_id="X", match_semantic_id="Y", score=0.5, path=[],
+                                    metric_id="m1", graph_score=0.8),
+        ]
+        self.assertCountEqual(expected, matches, "get_all_matches should map fallback key to metric_id=None")
+
+    def test_get_all_matches_graph_score_equals_edge_weight(self):
+        """graph_score in exported matches should always equal the edge's current weight."""
+        g = algorithm.SemanticMatchGraph()
+        g.add_semantic_match("U", "V", 0.2, metric_id="m1")
+        g.add_semantic_match("U", "V", 0.9, metric_id="m2")  # raises weight to 0.9
+        g.add_semantic_match("U", "V", 0.7, metric_id="m3")
+
+        edge_weight = g["U"]["V"]["weight"]
+        self.assertAlmostEqual(edge_weight, 0.9, places=12)
+
+        for m in g.get_all_matches():
+            self.assertEqual(m.base_semantic_id, "U")
+            self.assertEqual(m.match_semantic_id, "V")
+            self.assertAlmostEqual(m.graph_score or -1.0, edge_weight, places=12,
+                                   msg="graph_score should equal the edge's working weight")
 
     def test_get_all_matches_varying_weights(self):
         """Test that matches with different weights are retrieved correctly."""
@@ -61,37 +135,72 @@ class TestSemanticMatchGraph(unittest.TestCase):
         matches = self.graph.get_all_matches()
 
         expected_matches = [
-            algorithm.SemanticMatch(base_semantic_id="A", match_semantic_id="B", score=0.8, path=[]),
-            algorithm.SemanticMatch(base_semantic_id="B", match_semantic_id="C", score=0.6, path=[]),
-            algorithm.SemanticMatch(base_semantic_id="C", match_semantic_id="D", score=0.9, path=[]),
-            algorithm.SemanticMatch(base_semantic_id="D", match_semantic_id="E", score=0.3, path=[]),
-            algorithm.SemanticMatch(base_semantic_id="E", match_semantic_id="F", score=1.0, path=[]),
+            algorithm.SemanticMatch(base_semantic_id="A", match_semantic_id="B", score=0.8, path=[],
+                                    metric_id=None, graph_score=0.8),
+            algorithm.SemanticMatch(base_semantic_id="B", match_semantic_id="C", score=0.6, path=[],
+                                    metric_id=None, graph_score=0.6),
+            algorithm.SemanticMatch(base_semantic_id="C", match_semantic_id="D", score=0.9, path=[],
+                                    metric_id=None, graph_score=0.9),
+            algorithm.SemanticMatch(base_semantic_id="D", match_semantic_id="E", score=0.3, path=[],
+                                    metric_id=None, graph_score=0.3),
+            algorithm.SemanticMatch(base_semantic_id="E", match_semantic_id="F", score=1.0, path=[],
+                                    metric_id=None, graph_score=1.0),
         ]
 
         self.assertEqual(len(matches), 5, "Incorrect number of matches retrieved.")
         self.assertCountEqual(expected_matches, matches, "Matches do not match expected results.")
 
     def test_to_file(self):
-        """Test that the graph is correctly saved to a file."""
-        self.graph.to_file(self.TEST_FILE)
+        """Graph snapshot is saved with nodes and per-edge metric_scores."""
+        # add some extra metrics so we exercise merging
+        self.graph.add_semantic_match("A", "B", 0.8, metric_id="m1")
+        self.graph.add_semantic_match("A", "B", 0.6, metric_id="m2")
 
-        # Check if file exists
+        self.graph.to_file(self.TEST_FILE)
         self.assertTrue(os.path.exists(self.TEST_FILE), "File was not created.")
 
-        # Load file content and verify JSON structure
-        with open(self.TEST_FILE, "r") as file:
-            data = json.load(file)
+        with open(self.TEST_FILE, "r") as f:
+            data = json.load(f)
 
-        self.assertIsInstance(data, list, "File content should be a list of matches.")
-        self.assertEqual(len(data), 3, "Incorrect number of matches stored in file.")
+        # top-level structure
+        self.assertIsInstance(data, dict, "File content should be a dict with 'nodes' and 'edges'.")
+        self.assertIn("nodes", data)
+        self.assertIn("edges", data)
 
-        expected_data = [
-            {"base_semantic_id": "A", "match_semantic_id": "B", "score": 0.8, "path": []},
-            {"base_semantic_id": "B", "match_semantic_id": "C", "score": 0.6, "path": []},
-            {"base_semantic_id": "C", "match_semantic_id": "D", "score": 0.9, "path": []},
-        ]
+        # nodes: unordered compare
+        self.assertEqual(set(data["nodes"]), {"A", "B", "C", "D"})
 
-        self.assertEqual(data, expected_data, "File content does not match expected data.")
+        # edges: we expect 3 edges
+        edges = data["edges"]
+        self.assertIsInstance(edges, list)
+        self.assertEqual(len(edges), 3, "Incorrect number of edges stored.")
+
+        # helper to find an edge
+        def edge(u, v):
+            for e in edges:
+                if e["u"] == u and e["v"] == v:
+                    return e
+            self.fail(f"Missing edge {u}->{v} in saved file")
+
+        # A->B should have merged metrics and weight=max(metrics)
+        e_ab = edge("A", "B")
+        self.assertIn("metric_scores", e_ab)
+        self.assertDictEqual(
+            e_ab["metric_scores"],
+            {"_no_metric_id": 0.8, "m1": 0.8, "m2": 0.6},
+            "A->B metric_scores not serialized correctly",
+        )
+        self.assertAlmostEqual(e_ab["weight"], 0.8, places=12, msg="A->B weight should be max metric")
+
+        # B->C baseline
+        e_bc = edge("B", "C")
+        self.assertDictEqual(e_bc["metric_scores"], {"_no_metric_id": 0.6})
+        self.assertAlmostEqual(e_bc["weight"], 0.6, places=12)
+
+        # C->D baseline
+        e_cd = edge("C", "D")
+        self.assertDictEqual(e_cd["metric_scores"], {"_no_metric_id": 0.9})
+        self.assertAlmostEqual(e_cd["weight"], 0.9, places=12)
 
     def test_from_file(self):
         """Test that a graph can be correctly loaded from a file."""
