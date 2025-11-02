@@ -15,6 +15,7 @@ dependencies = [
   "tqdm>=4.46.1",
   "numpy>=2.3.4",
   "cvxpy>=1.7.3",
+  "ecos>=2.0.14",
 ]
 
 [project.optional-dependencies]
