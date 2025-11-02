@@ -147,8 +147,10 @@ class MetricAlignmentOptimizer:
         loss = cp.sum(cp.pos(margins))  # piecewise-linear convex
 
         if entropy_lambda > 0:
-            # cp.entr(x) = x*log(x); we add small offset to keep it defined near zero
-            loss += entropy_lambda * cp.sum(cp.entr(w + 1e-16))
+            # we add small offset to keep it defined near zero
+            n = len(metrics)
+            u = np.full(n, 1.0 / n)
+            loss += entropy_lambda * cp.sum_squares(w - u)
 
         constraints = [cp.sum(w) == 1.0]  # cp.sum(w) == 1.0 in CVXPY doesn’t return a plain bool at runtime,
         # it returns a Constraint object, confusing type checkers. Therefore, the "type: ignore" below.
