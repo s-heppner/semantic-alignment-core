@@ -16,6 +16,7 @@ mao.apply_unified_scores(weights=w, replace_weight=True)
 import math
 from typing import Dict, List, Optional, Sequence, Tuple
 from itertools import combinations
+import time
 
 import numpy as np
 import cvxpy as cp
@@ -37,6 +38,7 @@ class MetricAlignmentOptimizer:
         self.G = G
         self.metrics_: Optional[List[str]] = None
         self.weights_: Optional[Dict[str, float]] = None
+        self.optimization_stats: Optional[Dict[str, str]] = None
 
     # ---------- utilities ----------
 
@@ -121,13 +123,20 @@ class MetricAlignmentOptimizer:
         eps: float = 1e-8,
         sample_triplets: Optional[int] = None,
         entropy_lambda: float = 0.0,
-        solver: str = "ECOS",
+        solver: Optional[str] = "ECOS",
         verbose: bool = False,
     ) -> Dict[str, float]:
         """
         Solve: minimize sum_i pos(alpha_i · w) + entropy_lambda * sum w_i log w_i
         s.t. w >= 0, sum w = 1
+
+        If `solver = None`: Let `cvxpy` choose the solver
         """
+        t0 = time.perf_counter()
+        n_nodes = self.G.number_of_nodes()
+        n_edges = self.G.number_of_edges()
+        print(f"[mao] start optimize_weights | nodes={n_nodes} edges={n_edges} eps={eps}")
+
         pair_logs = self._collect_pair_logs(eps)
         metrics = self.metrics_ or []
         if not metrics:
@@ -160,6 +169,7 @@ class MetricAlignmentOptimizer:
             prob.solve(solver=solver, verbose=verbose)
         except Exception:
             prob.solve(solver="SCS", verbose=verbose)
+        used_solver = getattr(prob.solver_stats, "solver_name", str(solver))
 
         if w.value is None:  # type: ignore
             raise RuntimeError("Weight optimization failed; check solver output/logs.")
@@ -172,6 +182,16 @@ class MetricAlignmentOptimizer:
             w_arr /= s
 
         self.weights_ = {m: float(w_arr[i]) for i, m in enumerate(metrics)}
+        print(f"[mao] solve done | status={prob.status} | objective={prob.value:.6f} "
+              f"| solver={used_solver}")
+        print(f"[mao] learned weights: {self.weights_}")
+        print(f"[mao] total time: {time.perf_counter() - t0:.3f}s")
+        self.optimization_stats = {
+            "status": str(prob.status),
+            "solver": str(used_solver),
+            "total_time_seconds": f"{time.perf_counter() - t0:.3f}",
+            "number_of_edges": str(int(A.shape[0])),
+        }
         return self.weights_
 
     # ---------- apply unified score ----------
@@ -213,7 +233,7 @@ class MetricAlignmentOptimizer:
             # Unified cost/similarity (log-space blend = weighted geometric mean in real space)
             c_hat = 0.0
             for m, w_m in edge_w.items():
-                s_m = self._clamp_score(ms[m], eps)  # or self._clamp01(...)
+                s_m = self._clamp_score(ms[m], eps)
                 c_hat += w_m * (-math.log(s_m))
             s_hat = math.exp(-c_hat)
 
@@ -228,6 +248,7 @@ class MetricAlignmentOptimizer:
                 metric_scores_weighted[m] = s_m ** w_m
             d["metric_scores_weighted"] = metric_scores_weighted
 
-            # Working weight: max of weighted metric scores (your requested policy)
+            # Working weight: max of weighted metric scores
             if replace_weight and metric_scores_weighted:
-                d["weight"] = max(metric_scores_weighted.values())
+                d["weight_before_optimization"] = d["weight"]
+                d["weight"] = s_hat

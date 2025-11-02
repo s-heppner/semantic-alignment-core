@@ -99,9 +99,9 @@ class TestMetricAlignmentOptimizer(unittest.TestCase):
         self.assertAlmostEqual(d["metric_scores_weighted"]["m_good"], s_good ** 0.97, places=10)
         self.assertAlmostEqual(d["metric_scores_weighted"]["m_bad"], s_bad ** 0.03, places=10)
 
-        # working weight policy: max of weighted metric scores
-        expected_operational = max(s_good ** 0.97, s_bad ** 0.03)
-        self.assertAlmostEqual(d["weight"], expected_operational, places=10)
+        # NEW policy: working weight equals unified similarity (s_hat), not max per-metric
+        self.assertIn("weight_before_optimization", d)  # keep old value for auditability
+        self.assertAlmostEqual(d["weight"], s_hat_expected, places=10)
 
     def test_no_metrics_returns_empty_weights_and_no_crash_on_apply(self):
         G2 = nx.DiGraph()
