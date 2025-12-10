@@ -382,6 +382,33 @@ class TestFindSemanticMatches(unittest.TestCase):
         self.assertIn("D", matched_semantic_ids)
         self.assertNotIn("A", matched_semantic_ids)  # "A" should not be revisited
 
+    def test_avoid_longer_cycles(self):
+        """Ensure that non-start-node cycles (e.g. B -> C -> D -> B) do not create infinite paths."""
+        # Create a cycle B -> C -> D -> B on top of the existing setup:
+        # A -> B, B -> C, C -> D, B -> D, D -> E
+        self.graph.add_edge("D", "B", weight=0.4)
+
+        matches: List[algorithm.SemanticMatch] = algorithm.find_semantic_matches(
+            self.graph,
+            semantic_id="A",
+            min_score=0.0,  # allow all paths that pass the structural constraints
+        )
+
+        # 1) We still only get the finite set of simple paths starting at A.
+        # The additional D -> B edge must not create extra paths like A->B->C->D->B->...
+        self.assertEqual(6, len(matches))
+
+        # 2) Every returned path must be simple: no node appears twice.
+        for m in matches:
+            # Reconstruct the full node sequence for the path:
+            # path... -> match_semantic_id
+            full_path = m.path + [m.match_semantic_id]
+            self.assertEqual(
+                len(full_path),
+                len(set(full_path)),
+                msg=f"Path contains a cycle: {full_path}",
+            )
+
     def test_minimum_threshold(self):
         """Ensure that results below the minimum score are excluded."""
         matches = algorithm.find_semantic_matches(self.graph, "A", min_score=0.6)

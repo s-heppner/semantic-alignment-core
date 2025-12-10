@@ -206,8 +206,12 @@ def find_semantic_matches(
 
         # Traverse to the neighboring and therefore connected `semantic_id`s
         for neighbor, edge_data in graph[node].items():
-            if path and neighbor == path[-1]:
-                continue  # avoid immediate backtrack A->B->A ping-pong
+            # Avoid any cycle: no revisiting nodes that are already in this path
+            # Note: `path` holds all previous nodes; `node` is *not* yet in `path`
+            # This also lets us avoid immediate backtrack A->B->A ping-pong for free
+            if neighbor in path or neighbor == node:
+                continue
+
             edge_weight = float(edge_data.get("weight", 0.0))
             new_score: float = score * edge_weight  # Multiplicative propagation
 
