@@ -170,8 +170,8 @@ class SemanticMatchRegistry:
         request_body = {"semantic_id": semantic_id}
         endpoint = config['RESOLVER']['endpoint']
         port = config['RESOLVER'].getint('port')
-        url = f"{endpoint}:{port}/get_smr"
-        response = requests.get(url, json=request_body)
+        url = f"{endpoint}:{port}/query_smr"
+        response = requests.post(url, json=request_body)
 
         # Check if the response is successful (status code 200)
         if response.status_code == 200:
