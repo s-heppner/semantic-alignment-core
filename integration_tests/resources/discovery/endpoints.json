@@ -1,0 +1,8 @@
+{
+  "a.example": "http://smr-a:8000",
+  "b.example": "http://smr-b:8000",
+  "c.example": "http://smr-c:8000",
+  "0112": "http://smr-a:8000",
+  "0173": "http://smr-b:8000",
+  "FALLBACK": "http://smr-a:8000"
+}

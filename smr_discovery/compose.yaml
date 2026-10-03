@@ -9,6 +9,6 @@ services:
       SMR_PORT: 8125
     restart: unless-stopped
     ports:
-      - "8000:8000"
+      - "8125:8125"
     working_dir: /app/src/smr_discovery
     command: ["python", "service.py"]

@@ -1,0 +1,85 @@
+{
+    "nodes": [
+        "0112-1ABC#01-TRA001#1",
+        "0173-1ABC#01-TRB001#1",
+        "https://a.example/cycle/X",
+        "https://a.example/discovery/A",
+        "https://a.example/fault/A",
+        "https://a.example/gap/A",
+        "https://a.example/gap/C",
+        "https://a.example/gap/D",
+        "https://a.example/transitive/A",
+        "https://b.example/cycle/Y",
+        "https://b.example/fault/B",
+        "https://b.example/gap/B",
+        "https://b.example/transitive/B",
+        "https://c.example/discovery/B",
+        "https://c.example/fault/X"
+    ],
+    "edges": [
+        {
+            "u": "https://a.example/transitive/A",
+            "v": "https://b.example/transitive/B",
+            "weight": 0.8,
+            "metric_scores": {
+                "_no_metric_id": 0.8
+            }
+        },
+        {
+            "u": "0112-1ABC#01-TRA001#1",
+            "v": "0173-1ABC#01-TRB001#1",
+            "weight": 0.8,
+            "metric_scores": {
+                "_no_metric_id": 0.8
+            }
+        },
+        {
+            "u": "https://a.example/cycle/X",
+            "v": "https://b.example/cycle/Y",
+            "weight": 0.9,
+            "metric_scores": {
+                "_no_metric_id": 0.9
+            }
+        },
+        {
+            "u": "https://a.example/gap/A",
+            "v": "https://b.example/gap/B",
+            "weight": 0.9,
+            "metric_scores": {
+                "_no_metric_id": 0.9
+            }
+        },
+        {
+            "u": "https://a.example/gap/C",
+            "v": "https://a.example/gap/D",
+            "weight": 0.9,
+            "metric_scores": {
+                "_no_metric_id": 0.9
+            }
+        },
+        {
+            "u": "https://a.example/discovery/A",
+            "v": "https://c.example/discovery/B",
+            "weight": 0.9,
+            "metric_scores": {
+                "_no_metric_id": 0.9
+            }
+        },
+        {
+            "u": "https://a.example/fault/A",
+            "v": "https://b.example/fault/B",
+            "weight": 0.9,
+            "metric_scores": {
+                "_no_metric_id": 0.9
+            }
+        },
+        {
+            "u": "https://a.example/fault/A",
+            "v": "https://c.example/fault/X",
+            "weight": 0.9,
+            "metric_scores": {
+                "_no_metric_id": 0.9
+            }
+        }
+    ]
+}

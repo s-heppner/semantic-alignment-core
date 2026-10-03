@@ -1,0 +1,56 @@
+{
+    "nodes": [
+        "0173-1ABC#01-TRB001#1",
+        "0173-1ABC#01-TRC001#1",
+        "https://a.example/cycle/X",
+        "https://a.example/gap/C",
+        "https://b.example/cycle/Y",
+        "https://b.example/fault/B",
+        "https://b.example/fault/C",
+        "https://b.example/gap/B",
+        "https://b.example/transitive/B",
+        "https://b.example/transitive/C"
+    ],
+    "edges": [
+        {
+            "u": "https://b.example/transitive/B",
+            "v": "https://b.example/transitive/C",
+            "weight": 0.5,
+            "metric_scores": {
+                "_no_metric_id": 0.5
+            }
+        },
+        {
+            "u": "0173-1ABC#01-TRB001#1",
+            "v": "0173-1ABC#01-TRC001#1",
+            "weight": 0.5,
+            "metric_scores": {
+                "_no_metric_id": 0.5
+            }
+        },
+        {
+            "u": "https://b.example/cycle/Y",
+            "v": "https://a.example/cycle/X",
+            "weight": 0.9,
+            "metric_scores": {
+                "_no_metric_id": 0.9
+            }
+        },
+        {
+            "u": "https://b.example/gap/B",
+            "v": "https://a.example/gap/C",
+            "weight": 0.9,
+            "metric_scores": {
+                "_no_metric_id": 0.9
+            }
+        },
+        {
+            "u": "https://b.example/fault/B",
+            "v": "https://b.example/fault/C",
+            "weight": 0.9,
+            "metric_scores": {
+                "_no_metric_id": 0.9
+            }
+        }
+    ]
+}

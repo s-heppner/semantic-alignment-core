@@ -8,9 +8,10 @@ from fastapi import FastAPI
 import uvicorn
 
 from smr import algorithm
-from smr.service import SemanticMatchRegistry
+from smr.service import MatchRequest, SemanticMatchRegistry
 
 from contextlib import contextmanager
+from unittest import mock
 import signal
 import time
 
@@ -156,6 +157,104 @@ class TestSemanticMatchRegistry(unittest.TestCase):
             resp = requests.post("http://localhost:8000/query_matches", json=match_request)
             self.assertEqual(resp.status_code, 200)
             self.assertEqual([], resp.json())
+
+
+class TestQueryMatchesRemote(unittest.TestCase):
+    """
+    Tests `SemanticMatchRegistry.query_matches` directly, with the remote services mocked
+    """
+    def setUp(self):
+        graph = algorithm.SemanticMatchGraph()
+        graph.add_semantic_match("https://a.example/A", "https://b.example/B", 0.8)
+        graph.add_semantic_match("https://a.example/A", "https://c.example/C", 0.9)
+        self.smr = SemanticMatchRegistry(endpoint="http://smr-a", graph=graph)
+        self.request = MatchRequest(semantic_id="https://a.example/A", score_limit=0.1, local_only=False)
+        # B is on `smr-b`, C on `smr-c`
+        resolver = mock.patch.object(
+            SemanticMatchRegistry,
+            "_get_matcher_from_semantic_id",
+            side_effect=lambda semantic_id: "http://smr-b" if "b.example" in semantic_id else "http://smr-c"
+        )
+        resolver.start()
+        self.addCleanup(resolver.stop)
+
+    @staticmethod
+    def _response(payload, status_code=200):
+        response = mock.Mock(status_code=status_code)
+        response.json.return_value = payload
+        return response
+
+    @staticmethod
+    def _paths(matches):
+        return {" -> ".join(m.path + [m.match_semantic_id]): round(m.score, 10) for m in matches}
+
+    def _remote_b_to_d(self):
+        return self._response([algorithm.SemanticMatch(
+            base_semantic_id="https://b.example/B",
+            match_semantic_id="https://b.example/D",
+            score=0.5,
+            path=["https://b.example/B"],
+        ).model_dump()])
+
+    def test_query_matches_combines_remote_matches(self):
+        def remote(url, **kwargs):
+            if url == "http://smr-b/query_matches":
+                # The score_limit for the remote is divided by the score of the local hop
+                self.assertAlmostEqual(0.1 / 0.8, kwargs["json"]["score_limit"])
+                self.assertEqual({"http://smr-a"}, set(kwargs["json"]["already_checked_locations"]))
+                return self._remote_b_to_d()
+            return self._response([])
+        with mock.patch("smr.service.requests.post", side_effect=remote):
+            matches = self.smr.query_matches(self.request)
+        self.assertEqual(
+            {
+                "https://a.example/A -> https://c.example/C": 0.9,
+                "https://a.example/A -> https://b.example/B": 0.8,
+                "https://a.example/A -> https://b.example/B -> https://b.example/D": 0.4,
+            },
+            self._paths(matches)
+        )
+        self.assertTrue(all(m.base_semantic_id == "https://a.example/A" for m in matches))
+
+    def test_query_matches_unreachable_remote_returns_other_matches(self):
+        def remote(url, **kwargs):
+            if url == "http://smr-c/query_matches":
+                raise requests.ConnectionError("smr-c is down")
+            return self._remote_b_to_d()
+        with mock.patch("smr.service.requests.post", side_effect=remote):
+            matches = self.smr.query_matches(self.request)
+        self.assertEqual(
+            {
+                "https://a.example/A -> https://c.example/C": 0.9,
+                "https://a.example/A -> https://b.example/B": 0.8,
+                "https://a.example/A -> https://b.example/B -> https://b.example/D": 0.4,
+            },
+            self._paths(matches)
+        )
+
+    def test_query_matches_bad_remote_payload_keeps_other_remote_matches(self):
+        def remote(url, **kwargs):
+            if url == "http://smr-c/query_matches":
+                return self._response({"detail": "Internal Server Error"}, status_code=500)
+            return self._remote_b_to_d()
+        with mock.patch("smr.service.requests.post", side_effect=remote):
+            matches = self.smr.query_matches(self.request)
+        self.assertIn("https://a.example/A -> https://b.example/B -> https://b.example/D", self._paths(matches))
+
+    def test_query_matches_drops_remote_path_back_to_queried_id(self):
+        def remote(url, **kwargs):
+            return self._response([algorithm.SemanticMatch(
+                base_semantic_id="https://b.example/B",
+                match_semantic_id="https://a.example/A",
+                score=0.9,
+                path=["https://b.example/B"],
+            ).model_dump()])
+        with mock.patch("smr.service.requests.post", side_effect=remote):
+            matches = self.smr.query_matches(self.request)
+        self.assertEqual(
+            {"https://a.example/A -> https://c.example/C": 0.9, "https://a.example/A -> https://b.example/B": 0.8},
+            self._paths(matches)
+        )
 
 
 if __name__ == '__main__':

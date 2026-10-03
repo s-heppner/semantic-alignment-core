@@ -1,0 +1,51 @@
+name: smr-integration-tests
+
+x-smr: &smr
+  build: ../semantic_match_registry
+  healthcheck:
+    test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/openapi.json')"]
+    interval: 2s
+    timeout: 2s
+    retries: 15
+
+services:
+  smr-a:
+    <<: *smr
+    ports:
+      - "8001:8000"
+    volumes:
+      - ./resources/smr-a/config.ini:/app/src/smr/config.ini:ro
+      - ./resources/smr-a/graph.json:/app/data/graph.json:ro
+
+  smr-b:
+    <<: *smr
+    ports:
+      - "8002:8000"
+    volumes:
+      - ./resources/smr-b/config.ini:/app/src/smr/config.ini:ro
+      - ./resources/smr-b/graph.json:/app/data/graph.json:ro
+
+  smr-c:
+    <<: *smr
+    ports:
+      - "8003:8000"
+    volumes:
+      - ./resources/smr-c/config.ini:/app/src/smr/config.ini:ro
+      - ./resources/smr-c/graph.json:/app/data/graph.json:ro
+
+  smr-discovery:
+    build: ../smr_discovery
+    environment:
+      SMR_ENDPOINTS_JSON_FILE: /app/resources/endpoints.json
+      SMR_ENDPOINT: http://smr-discovery:8125
+      SMR_LISTEN_ADDRESS: 0.0.0.0
+      SMR_PORT: 8125
+    ports:
+      - "8125:8125"
+    volumes:
+      - ./resources/discovery/endpoints.json:/app/resources/endpoints.json:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8125/openapi.json')"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
