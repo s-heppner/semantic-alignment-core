@@ -243,3 +243,59 @@ jobs:
       - name: Check code style with PyCodestyle
         run: |
           pycodestyle --count --max-line-length 120 src/smr_alignment tests
+
+  integration_tests_test:
+    # This job runs the integration tests, which start all services via docker compose
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./integration_tests
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.X_PYTHON_VERSION }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.X_PYTHON_VERSION }}
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install .[dev]
+
+      - name: Run Integration Tests
+        env:
+          SMR_INTEGRATION_TESTS_KEEP_STACK: "1"
+        run: python -m unittest discover -v
+
+      - name: Show service logs
+        if: failure()
+        run: docker compose logs
+
+      - name: Stop services
+        if: always()
+        run: docker compose down --volumes
+
+  integration_tests_static-analysis:
+    # This job runs static code analysis, namely pycodestyle and mypy
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./integration_tests
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: ${{ env.X_PYTHON_VERSION }}
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install .[dev]
+      - name: Check typing with MyPy
+        run: |
+          mypy tests
+      - name: Check code style with PyCodestyle
+        run: |
+          pycodestyle --count --max-line-length 120 tests

@@ -6,6 +6,9 @@ from fastapi import APIRouter, Response
 
 from smr import algorithm
 
+# Timeout in seconds for requests to remote Semantic Match Registries and the discovery service
+REMOTE_REQUEST_TIMEOUT: float = 5.0
+
 
 class MatchRequest(BaseModel):
     """
@@ -102,25 +105,21 @@ class SemanticMatchRegistry:
         # Now look for remote matches:
         additional_remote_matches: List[algorithm.SemanticMatch] = []
         for match in matches:
-            # If the `match_semantic_id` has the same namespace as the `base_semantic_id` there is no sense in looking
-            # further, since the semantic_id Resolver would return this Semantic Match Registry.
-            if match.base_semantic_id.split("/")[0] == match.match_semantic_id.split("/")[0]:
-                continue  # Todo: We definitely need to check for namespace, this just takes "https:"
-
             # We need to make sure we do not go to the same Semantic Match Registry twice.
             # For that we update the already_checked_locations with the current endpoint:
             already_checked_locations: Set[str] = {self.endpoint}
             if request_body.already_checked_locations:
                 already_checked_locations.update(request_body.already_checked_locations)
 
+            # The discovery service decides which Semantic Match Registry is responsible for the `match_semantic_id`.
+            # If that is this one, it is part of `already_checked_locations`, so we do not need to compare namespaces.
             remote_matching_service = self._get_matcher_from_semantic_id(match.match_semantic_id)
             # If we could not find the remote_matching_service, or we already checked it, we continue
             if remote_matching_service is None or remote_matching_service in already_checked_locations:
+                # Note: There is an edge case where this does not find all matches:
+                #   Imagine A -> B and C -> D are on SMR1 and B -> C is on SMR2. A query for A on SMR1 asks SMR2 for
+                #   B, but SMR2 does not ask SMR1 for C, since SMR1 is already checked. Therefore, D is not found.
                 continue
-                # Todo: There is an edge case where this would not find all matches:
-                #   Imagine we have a situation, where A -> B -> C -> D, but A and C are on SMS1 and B and C are
-                #   on SMS2. This would not find the match C, since we already checked SMS1
-                #   I guess this is fine for the moment though.
 
             # This makes it possible to create the match request:
             remote_matching_request = MatchRequest(
@@ -137,14 +136,36 @@ class SemanticMatchRegistry:
                 already_checked_locations=already_checked_locations
             )
             url = f"{remote_matching_service}/query_matches"
-            new_matches_response = requests.post(url, json=remote_matching_request.model_dump(mode="json"))
-            payload = new_matches_response.json()
-            if not isinstance(payload, list):
-                return matches  # Protect against bad remotes by stopping if they send nonsense
-            response_matches = [algorithm.SemanticMatch(**match) for match in payload]
-            additional_remote_matches.extend(response_matches)
+            try:
+                new_matches_response = requests.post(
+                    url,
+                    json=remote_matching_request.model_dump(mode="json"),
+                    timeout=REMOTE_REQUEST_TIMEOUT
+                )
+                payload = new_matches_response.json()
+            except (requests.RequestException, ValueError):
+                continue  # An unreachable remote must not break the query, we still return all other matches
+            if new_matches_response.status_code != 200 or not isinstance(payload, list):
+                continue  # Protect against bad remotes by skipping them if they send nonsense
+            for remote_match in (algorithm.SemanticMatch(**m) for m in payload):
+                # The remote returns matches starting at `match.match_semantic_id`, so we need to prepend the local
+                # part of the path: A -> B (local) and B -> C (remote) become A -> C.
+                path = match.path + remote_match.path
+                # Avoid paths that visit a `semantic_id` twice, including the ones going back to the queried one
+                if len(set(path + [remote_match.match_semantic_id])) != len(path) + 1:
+                    continue
+                additional_remote_matches.append(algorithm.SemanticMatch(
+                    base_semantic_id=request_body.semantic_id,
+                    match_semantic_id=remote_match.match_semantic_id,
+                    score=match.score * remote_match.score,  # path product
+                    path=path,
+                    metric_id=None,  # Multi-edge path: no single metric applies
+                    graph_score=match.score * remote_match.score,
+                ))
         # Finally, put all matches together and return
-        matches.extend(additional_remote_matches)
+        for remote_match in additional_remote_matches:
+            if remote_match not in matches:
+                matches.append(remote_match)
         return matches
 
     def post_matches(
@@ -171,7 +192,10 @@ class SemanticMatchRegistry:
         endpoint = config['RESOLVER']['endpoint']
         port = config['RESOLVER'].getint('port')
         url = f"{endpoint}:{port}/query_smr"
-        response = requests.post(url, json=request_body)
+        try:
+            response = requests.post(url, json=request_body, timeout=REMOTE_REQUEST_TIMEOUT)
+        except requests.RequestException:
+            return None  # Without a reachable discovery service, we can only return the local matches
 
         # Check if the response is successful (status code 200)
         if response.status_code == 200:

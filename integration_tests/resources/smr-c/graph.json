@@ -1,0 +1,26 @@
+{
+    "nodes": [
+        "https://c.example/discovery/B",
+        "https://c.example/discovery/C",
+        "https://c.example/fault/X",
+        "https://c.example/fault/Y"
+    ],
+    "edges": [
+        {
+            "u": "https://c.example/discovery/B",
+            "v": "https://c.example/discovery/C",
+            "weight": 0.9,
+            "metric_scores": {
+                "_no_metric_id": 0.9
+            }
+        },
+        {
+            "u": "https://c.example/fault/X",
+            "v": "https://c.example/fault/Y",
+            "weight": 0.9,
+            "metric_scores": {
+                "_no_metric_id": 0.9
+            }
+        }
+    ]
+}
