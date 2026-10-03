@@ -10,7 +10,7 @@ from smr_discovery import resolver
 
 
 class TestSMRService(unittest.TestCase):
-    """Integration-style unit tests for the /get_smr endpoint."""
+    """Integration-style unit tests for the /query_smr endpoint."""
 
     @classmethod
     def setUpClass(cls):
@@ -57,44 +57,44 @@ class TestSMRService(unittest.TestCase):
 
     # ---------- tests ----------
 
-    def test_get_smr_iri_backend_match(self):
-        r = self.client.request("GET", "/get_smr", json={"semantic_id": "https://s-heppner.com/whatever"})
+    def test_query_smr_iri_backend_match(self):
+        r = self.client.post("/query_smr", json={"semantic_id": "https://s-heppner.com/whatever"})
         self.assertEqual(r.status_code, 200, r.text)
         data = r.json()
         self.assertEqual(data["smr_endpoint"], "https://s-heppner.com/smr")
         self.assertIsInstance(data["meta_information"], dict)
 
-    def test_get_smr_dns_txt_fallback(self):
+    def test_query_smr_dns_txt_fallback(self):
         # Domain not in endpoints.json; DNS TXT provides smr: URL
         with self._patch_dns_txt("smr: https://dns.example.org/smr"):
-            r = self.client.request("GET", "/get_smr", json={"semantic_id": "https://no-entry.example/path"})
+            r = self.client.post("/query_smr", json={"semantic_id": "https://no-entry.example/path"})
         self.assertEqual(r.status_code, 200, r.text)
         self.assertEqual(r.json()["smr_endpoint"], "https://dns.example.org/smr")
 
-    def test_get_smr_dns_noanswer_uses_fallback(self):
+    def test_query_smr_dns_noanswer_uses_fallback(self):
         with self._patch_dns_noanswer():
-            r = self.client.request("GET", "/get_smr", json={"semantic_id": "https://no-such-dns.example/x"})
+            r = self.client.post("/query_smr", json={"semantic_id": "https://no-such-dns.example/x"})
         self.assertEqual(r.status_code, 200, r.text)
         self.assertEqual(r.json()["smr_endpoint"], "https://s-heppner.com/fallback_smr")
 
-    def test_get_smr_dns_nxdomain_uses_fallback(self):
+    def test_query_smr_dns_nxdomain_uses_fallback(self):
         with self._patch_dns_nxdomain():
-            r = self.client.request("GET", "/get_smr", json={"semantic_id": "https://still-bad.example/x"})
+            r = self.client.post("/query_smr", json={"semantic_id": "https://still-bad.example/x"})
         self.assertEqual(r.status_code, 200, r.text)
         self.assertEqual(r.json()["smr_endpoint"], "https://s-heppner.com/fallback_smr")
 
-    def test_get_smr_irdi_0112_maps_to_cdd(self):
-        r = self.client.request("GET", "/get_smr", json={"semantic_id": "0112-0001#01-ACK323#7"})
+    def test_query_smr_irdi_0112_maps_to_cdd(self):
+        r = self.client.post("/query_smr", json={"semantic_id": "0112-0001#01-ACK323#7"})
         self.assertEqual(r.status_code, 200, r.text)
         self.assertEqual(r.json()["smr_endpoint"], "https://s-heppner.com/cdd_smr")
 
-    def test_get_smr_irdi_0173_maps_to_eclass(self):
-        r = self.client.request("GET", "/get_smr", json={"semantic_id": "0173-0001#01-ACK323#7"})
+    def test_query_smr_irdi_0173_maps_to_eclass(self):
+        r = self.client.post("/query_smr", json={"semantic_id": "0173-0001#01-ACK323#7"})
         self.assertEqual(r.status_code, 200, r.text)
         self.assertEqual(r.json()["smr_endpoint"], "https://s-heppner.com/eclass_smr")
 
-    def test_get_smr_neither_irdi_nor_iri_returns_404(self):
-        r = self.client.request("GET", "/get_smr", json={"semantic_id": "not-a-url-or-irdi"})
+    def test_query_smr_neither_irdi_nor_iri_returns_404(self):
+        r = self.client.post("/query_smr", json={"semantic_id": "not-a-url-or-irdi"})
         self.assertEqual(r.status_code, 404)
         self.assertIn("No Semantic Match Registry endpoint found", r.json()["detail"])
 

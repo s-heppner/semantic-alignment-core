@@ -32,14 +32,14 @@ class SMRDiscoveryService:
         """
         self.router = APIRouter()
         self.router.add_api_route(
-            "/get_smr",
-            self.get_smr,
-            methods=["GET"]
+            "/query_smr",
+            self.query_smr,
+            methods=["POST"]
         )
         self.endpoint: str = endpoint
         self.smr_endpoints: resolver.SMREndpoints = smr_endpoints
 
-    def get_smr(
+    def query_smr(
             self,
             request_body: SMRRequest
     ) -> SMRResponse:
